@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 
 add_executable(
-    hello_cuda
+    CudaLearning
+    main.cpp
     chapter01/hellocuda.cu
+    chapter02/SumArraysOnGPU.cu
 )

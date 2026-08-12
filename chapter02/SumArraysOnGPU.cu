@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
+#include "timer.hpp"
 
 #define Check(Call)                                                                 \
 {                                                                                   \
     cudaError_t error = Call;                                                       \
     if( error != cudaSuccess )                                                      \
     {                                                                               \
-        printf("Error: %s: %d\n", __FILE__, __LINE__);                                \
+        printf("Error: %s: %d\n", __FILE__, __LINE__);                              \
         printf("code: %d, reason: %s\n", error, cudaGetErrorString(error));         \
         exit(1);                                                                    \
     }                                                                               \
@@ -100,14 +101,27 @@ int ArraysSum(size_t nElem)
     cudaMemcpy( d_A, h_A, nBytes, cudaMemcpyHostToDevice );
     cudaMemcpy( d_B, h_B, nBytes, cudaMemcpyHostToDevice );
     
-    dim3 block(nElem);
-    dim3 grid(nElem/block.x);
+    dim3 block(256);
+    size_t blockThreads = block.x * block.y * block.z;
+    dim3 grid( (nElem + blockThreads - 1) / blockThreads );
     
+    Timer timer("SumArraysOnGPU");
+    timer.start();
     SumArraysOnGPU<<<grid, block>>>(d_A, d_B, d_C, nElem);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess)
+    {
+        printf("Launch error: %s\n", cudaGetErrorString(err));
+    }
+    cudaDeviceSynchronize();
+    timer.elapsedSeconds();
     
     cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost);
     
+    Timer timerHost("SumArraysOnHost");
+    timerHost.start();
     SumArraysOnHost(h_A, h_B, hostRef, nElem);
+    timerHost.elapsedSeconds();
     
     checkResult(hostRef, gpuRef, nElem);
     

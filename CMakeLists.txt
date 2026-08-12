@@ -8,6 +8,9 @@ set(CMAKE_CUDA_STANDARD 17)
 add_executable(
     CudaLearning
     main.cpp
+    timer.cpp
     chapter01/hellocuda.cu
     chapter02/SumArraysOnGPU.cu
 )
+
+target_include_directories(CudaLearning PRIVATE ${CMAKE_SOURCE_DIR})

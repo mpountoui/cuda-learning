@@ -4,6 +4,6 @@
 
 int main()
 {
-    ArraysSum(32);
+    ArraysSum(1<<24);
     return 0;
 }

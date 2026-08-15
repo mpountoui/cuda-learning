@@ -2,6 +2,8 @@
 #include <cuda_runtime.h>
 #include "timer.hpp"
 
+/*------------------------------------------------------------------------------------------*/
+
 #define Check(Call)                                                                 \
 {                                                                                   \
     cudaError_t error = Call;                                                       \
@@ -76,63 +78,104 @@ __global__ void SumArraysOnGPU(float* a, float* b, float* c, size_t n)
 
 /*------------------------------------------------------------------------------------------*/
 
-int ArraysSum(size_t nElem)
+void allocateAndInitializeHostMemory(size_t nElem, float*& h_A, float*& h_B, float*& hostRef, float*& gpuRef, size_t nBytes)
 {
-    int dev = 0;
-    cudaSetDevice(dev);
-    
-    size_t nBytes = nElem * sizeof(float);
-    
-    float* h_A = (float*) malloc(nBytes);
-    float* h_B = (float*) malloc(nBytes);
-    float* hostRef = (float*) calloc(nElem, sizeof(float));
-    float* gpuRef  = (float*) calloc(nElem, sizeof(float));
+    Timer timer("AllocateAndInitializeHostMemory");
+    timer.start();
+    h_A = (float*) malloc(nBytes);
+    h_B = (float*) malloc(nBytes);
+    hostRef = (float*) calloc(nElem, sizeof(float));
+    gpuRef  = (float*) calloc(nElem, sizeof(float));
     
     InitialData(h_A, nElem);
     InitialData(h_B, nElem);
-    
-    float* d_A = nullptr;
-    float* d_B = nullptr;
-    float* d_C = nullptr;
-    cudaMalloc( &d_A, nBytes );
-    cudaMalloc( &d_B, nBytes );
-    cudaMalloc( &d_C, nBytes );
-    
-    cudaMemcpy( d_A, h_A, nBytes, cudaMemcpyHostToDevice );
-    cudaMemcpy( d_B, h_B, nBytes, cudaMemcpyHostToDevice );
-    
-    dim3 block(256);
+    timer.elapsedSeconds();
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+void allocateDeviceMemory(size_t nBytes, float*& d_A, float*& d_B, float*& d_C)
+{
+    Timer timer("AllocateDeviceMemory");
+    timer.start();
+    cudaMalloc(&d_A, nBytes);
+    cudaMalloc(&d_B, nBytes);
+    cudaMalloc(&d_C, nBytes);
+    timer.elapsedSeconds();
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+void copyInputsToDevice(float* h_A, float* h_B, float* d_A, float* d_B, size_t nBytes)
+{
+    Timer timer("CopyInputsToDevice");
+    timer.start();
+    cudaMemcpy(d_A, h_A, nBytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, nBytes, cudaMemcpyHostToDevice);
+    timer.elapsedSeconds();
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+void executeGPUKernel(float* d_A, float* d_B, float* d_C, size_t nElem)
+{
+    dim3 block(1023);
     size_t blockThreads = block.x * block.y * block.z;
-    dim3 grid( (nElem + blockThreads - 1) / blockThreads );
+    dim3 grid((nElem + blockThreads - 1) / blockThreads);
     
     Timer timer("SumArraysOnGPU");
     timer.start();
     SumArraysOnGPU<<<grid, block>>>(d_A, d_B, d_C, nElem);
     cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess)
-    {
-        printf("Launch error: %s\n", cudaGetErrorString(err));
-    }
+    if (err != cudaSuccess) printf("Launch error: %s\n", cudaGetErrorString(err));
     cudaDeviceSynchronize();
     timer.elapsedSeconds();
-    
-    cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost);
-    
-    Timer timerHost("SumArraysOnHost");
-    timerHost.start();
-    SumArraysOnHost(h_A, h_B, hostRef, nElem);
-    timerHost.elapsedSeconds();
-    
-    checkResult(hostRef, gpuRef, nElem);
-    
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+void freeMemory(float* h_A, float* h_B, float* hostRef, float* gpuRef,
+                float* d_A, float* d_B, float* d_C)
+{
     free(h_A);
     free(h_B);
     free(hostRef);
     free(gpuRef);
-    
     cudaFree(d_A);
     cudaFree(d_B);
     cudaFree(d_C);
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+int ArraysSum(size_t nElem)
+{
+    cudaSetDevice(0);
+    size_t nBytes = nElem * sizeof(float);
+    
+    float* h_A = nullptr;
+    float* h_B = nullptr;
+    float* hostRef = nullptr;
+    float* gpuRef = nullptr;
+    float* d_A = nullptr;
+    float* d_B = nullptr;
+    float* d_C = nullptr;
+    
+    allocateAndInitializeHostMemory(nElem, h_A, h_B, hostRef, gpuRef, nBytes);
+    allocateDeviceMemory(nBytes, d_A, d_B, d_C);
+    copyInputsToDevice(h_A, h_B, d_A, d_B, nBytes);
+    
+    executeGPUKernel(d_A, d_B, d_C, nElem);
+    
+    cudaMemcpy(gpuRef, d_C, nBytes, cudaMemcpyDeviceToHost);
+    
+    Timer timerHost("SumArraysOnHost");
+    timerHost.start();`
+    SumArraysOnHost(h_A, h_B, hostRef, nElem);
+    timerHost.elapsedSeconds();
+    
+    checkResult(hostRef, gpuRef, nElem);
+    freeMemory(h_A, h_B, hostRef, gpuRef, d_A, d_B, d_C);
     
     return 0;
 }

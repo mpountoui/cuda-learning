@@ -10,7 +10,9 @@ add_executable(
     main.cpp
     timer.cpp
     chapter01/hellocuda.cu
+    chapter02/Auxiliaries.cu
     chapter02/SumArraysOnGPU.cu
+    chapter02/SumMatrixOnGPU.cu
 )
 
 target_include_directories(CudaLearning PRIVATE ${CMAKE_SOURCE_DIR})

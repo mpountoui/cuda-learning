@@ -15,10 +15,26 @@ void InitialData(float* array, int size)
 
 /*------------------------------------------------------------------------------------------*/
 
+void allocateAndInitializeHostMemory(size_t nElem, float*& h_A, float*& hostRef, float*& gpuRef, size_t nBytes)
+{
+    Timer timer("AllocateAndInitializeHostMemory");
+    timer.start();
+    
+    h_A = (float*) malloc(nElem * sizeof(float));
+    hostRef = (float*) calloc(nElem, sizeof(float));
+    gpuRef  = (float*) calloc(nElem, sizeof(float));
+    
+    InitialData(h_A, nElem);
+    timer.elapsedSeconds();
+}
+
+/*------------------------------------------------------------------------------------------*/
+
 void allocateAndInitializeHostMemory(size_t nElem, float*& h_A, float*& h_B, float*& hostRef, float*& gpuRef, size_t nBytes)
 {
     Timer timer("AllocateAndInitializeHostMemory");
     timer.start();
+    
     h_A = (float*) malloc(nBytes);
     h_B = (float*) malloc(nBytes);
     hostRef = (float*) calloc(nElem, sizeof(float));
@@ -26,6 +42,17 @@ void allocateAndInitializeHostMemory(size_t nElem, float*& h_A, float*& h_B, flo
     
     InitialData(h_A, nElem);
     InitialData(h_B, nElem);
+    timer.elapsedSeconds();
+}
+
+/*------------------------------------------------------------------------------------------*/
+
+void allocateDeviceMemory(size_t nBytes, float*& d_A, float*& d_C)
+{
+    Timer timer("AllocateDeviceMemory");
+    timer.start();
+    cudaMalloc(&d_A, nBytes);
+    cudaMalloc(&d_C, nBytes);
     timer.elapsedSeconds();
 }
 

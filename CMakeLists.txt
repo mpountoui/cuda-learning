@@ -13,6 +13,7 @@ add_executable(
     chapter02/Auxiliaries.cu
     chapter02/SumArraysOnGPU.cu
     chapter02/SumMatrixOnGPU.cu
+    chapter02/ParallelReductionWrapDivergence.cu
 )
 
 target_include_directories(CudaLearning PRIVATE ${CMAKE_SOURCE_DIR})

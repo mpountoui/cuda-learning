@@ -3,13 +3,10 @@
 #include "chapter01/hellocuda.h"
 #include "chapter02/SumArraysOnGPU.h"
 #include "chapter02/SumMatrixOnGPU.h"
+#include "chapter02/ParallelReductionWrapDivergence.h"
 
 int main()
 {
-    ArraysSum(1e8);
-    
-    printf("--------------------------------------------------\n");
-    
-    MatrixSum(1e4, 1e4);
+    ParallelReductionWrapDivergence(1024 * 1024);
     return 0;
 }

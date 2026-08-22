@@ -1,0 +1,6 @@
+#ifndef PARALLEL_REDUCTION_WRAP_DIVERGENCE_H
+#define PARALLEL_REDUCTION_WRAP_DIVERGENCE_H
+
+int ParallelReductionWrapDivergence(size_t nElem);
+
+#endif // PARALLEL_REDUCTION_WRAP_DIVERGENCE_H

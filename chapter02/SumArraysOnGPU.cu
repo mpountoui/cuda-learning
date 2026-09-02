@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include "timer.hpp"
-#include "Auxiliaries.h"
+#include "Auxiliaries.cuh"
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -86,7 +86,7 @@ int ArraysSum(size_t nElem)
     float* d_B = nullptr;
     float* d_C = nullptr;
     
-    allocateAndInitializeHostMemory(nElem, h_A, h_B, hostRef, gpuRef, nBytes);
+    allocateAndInitializeHostMemory(nElem, h_A, h_B, hostRef, gpuRef);
     allocateDeviceMemory(nBytes, d_A, d_B, d_C);
     copyInputsToDevice(h_A, h_B, d_A, d_B, nBytes);
     

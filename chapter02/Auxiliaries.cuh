@@ -1,28 +1,33 @@
+#ifndef AUXILIARIES_CUH
+#define AUXILIARIES_CUH
+
 #include "timer.hpp"
 
 /*------------------------------------------------------------------------------------------*/
 
-void InitialData(float* array, int size)
+template <typename T>
+void InitialData(T* array, int size)
 {
     time_t t;
     srand((unsigned) time(&t));
     
     for(int i = 0; i < size; ++i)
     {
-        array[i] = (float)( rand() & 0xFF ) / 10.0f;
+        array[i] = static_cast<T>((rand() & 0xFF) / 10.0f);
     }
 }
 
 /*------------------------------------------------------------------------------------------*/
 
-void allocateAndInitializeHostMemory(size_t nElem, float*& h_A, float*& hostRef, float*& gpuRef, size_t nBytes)
+template <typename T>
+void allocateAndInitializeHostMemory(size_t nElem, T*& h_A, T*& hostRef, T*& gpuRef)
 {
     Timer timer("AllocateAndInitializeHostMemory");
     timer.start();
     
-    h_A = (float*) malloc(nElem * sizeof(float));
-    hostRef = (float*) calloc(nElem, sizeof(float));
-    gpuRef  = (float*) calloc(nElem, sizeof(float));
+    h_A     = (T*) malloc(nElem * sizeof(T));
+    hostRef = (T*) calloc(nElem, sizeof(T));
+    gpuRef  = (T*) calloc(nElem, sizeof(T));
     
     InitialData(h_A, nElem);
     timer.elapsedSeconds();
@@ -30,15 +35,16 @@ void allocateAndInitializeHostMemory(size_t nElem, float*& h_A, float*& hostRef,
 
 /*------------------------------------------------------------------------------------------*/
 
-void allocateAndInitializeHostMemory(size_t nElem, float*& h_A, float*& h_B, float*& hostRef, float*& gpuRef, size_t nBytes)
+template <typename T>
+void allocateAndInitializeHostMemory(size_t nElem, T*& h_A, T*& h_B, T*& hostRef, T*& gpuRef)
 {
     Timer timer("AllocateAndInitializeHostMemory");
     timer.start();
     
-    h_A = (float*) malloc(nBytes);
-    h_B = (float*) malloc(nBytes);
-    hostRef = (float*) calloc(nElem, sizeof(float));
-    gpuRef  = (float*) calloc(nElem, sizeof(float));
+    h_A     = (T*) malloc(nElem * sizeof(T));
+    h_B     = (T*) malloc(nElem * sizeof(T));
+    hostRef = (T*) calloc(nElem, sizeof(T));
+    gpuRef  = (T*) calloc(nElem, sizeof(T));
     
     InitialData(h_A, nElem);
     InitialData(h_B, nElem);
@@ -47,7 +53,8 @@ void allocateAndInitializeHostMemory(size_t nElem, float*& h_A, float*& h_B, flo
 
 /*------------------------------------------------------------------------------------------*/
 
-void allocateDeviceMemory(size_t nBytes, float*& d_A, float*& d_C)
+template <typename T>
+void allocateDeviceMemory(size_t nBytes, T*& d_A, T*& d_C)
 {
     Timer timer("AllocateDeviceMemory");
     timer.start();
@@ -58,7 +65,8 @@ void allocateDeviceMemory(size_t nBytes, float*& d_A, float*& d_C)
 
 /*------------------------------------------------------------------------------------------*/
 
-void allocateDeviceMemory(size_t nBytes, float*& d_A, float*& d_B, float*& d_C)
+template <typename T>
+void allocateDeviceMemory(size_t nBytes, T*& d_A, T*& d_B, T*& d_C)
 {
     Timer timer("AllocateDeviceMemory");
     timer.start();
@@ -70,7 +78,8 @@ void allocateDeviceMemory(size_t nBytes, float*& d_A, float*& d_B, float*& d_C)
 
 /*------------------------------------------------------------------------------------------*/
 
-void copyInputsToDevice(float* h_A, float* h_B, float* d_A, float* d_B, size_t nBytes)
+template <typename T>
+void copyInputsToDevice(T* h_A, T* h_B, T* d_A, T* d_B, size_t nBytes)
 {
     Timer timer("CopyInputsToDevice");
     timer.start();
@@ -81,7 +90,8 @@ void copyInputsToDevice(float* h_A, float* h_B, float* d_A, float* d_B, size_t n
 
 /*------------------------------------------------------------------------------------------*/
 
-void freeMemory(float* h_A, float* h_B, float* hostRef, float* gpuRef, float* d_A, float* d_B, float* d_C)
+template <typename T>
+void freeMemory(T* h_A, T* h_B, T* hostRef, T* gpuRef, T* d_A, T* d_B, T* d_C)
 {
     free(h_A);
     free(h_B);
@@ -91,3 +101,5 @@ void freeMemory(float* h_A, float* h_B, float* hostRef, float* gpuRef, float* d_
     cudaFree(d_B);
     cudaFree(d_C);
 }
+
+#endif

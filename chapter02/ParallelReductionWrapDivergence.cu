@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
-#include "Auxiliaries.h"
+#include "Auxiliaries.cuh"
 
 /*------------------------------------------------------------------------------------------*/
 
-void RecursiveRuduce(float* h_data, float* h_ref, size_t nElem)
+void RecursiveRuduce(int* h_data, int* h_ref, size_t nElem)
 {
     if (nElem == 1)
     {
@@ -23,11 +23,11 @@ void RecursiveRuduce(float* h_data, float* h_ref, size_t nElem)
 
 /*------------------------------------------------------------------------------------------*/
 
-__global__ void ReduceNeighboredOnGPU(float* d_data, float* d_ref, size_t nElem)
+__global__ void ReduceNeighboredOnGPU(int* d_data, int* d_ref, size_t nElem)
 {
     int tid = threadIdx.x;
-    float* block_ptr = d_data + blockIdx.x * blockDim.x;
- 
+    int* block_ptr = d_data + blockIdx.x * blockDim.x;
+    
     for(int stride = 1; stride < blockDim.x; stride *= 2)
     {
         if( tid % (2 * stride) == 0 && tid + stride < nElem )
@@ -48,15 +48,15 @@ __global__ void ReduceNeighboredOnGPU(float* d_data, float* d_ref, size_t nElem)
 int ParallelReductionWrapDivergence(size_t nElem)
 {
     cudaSetDevice(0);
-    size_t nBytes = nElem * sizeof(float);
+    size_t nBytes = nElem * sizeof(int);
     
-    float* h_A = nullptr;
-    float* hostRef = nullptr;
-    float* gpuRef = nullptr;
-    float* d_A = nullptr;
-    float* d_C = nullptr;
+    int* h_A = nullptr;
+    int* hostRef = nullptr;
+    int* gpuRef = nullptr;
+    int* d_A = nullptr;
+    int* d_C = nullptr;
     
-    allocateAndInitializeHostMemory(nElem, h_A, hostRef, gpuRef, nBytes);
+    allocateAndInitializeHostMemory(nElem, h_A, hostRef, gpuRef);
     allocateDeviceMemory(nBytes, d_A, d_C);
     
     RecursiveRuduce(h_A, hostRef, nElem);
@@ -74,8 +74,8 @@ int ParallelReductionWrapDivergence(size_t nElem)
         gpuRef[0] += gpuRef[i];
     }
     
-    printf("ParallelReductionWrapDivergence: Host %f, GPU %f\n", hostRef[0], gpuRef[0]);
-    if( std::abs(gpuRef[0] - hostRef[0]) < 1e-5 )
+    printf("ParallelReductionWrapDivergence: Host %d, GPU %d\n", hostRef[0], gpuRef[0]);
+    if( gpuRef[0] == hostRef[0] )
     {
         printf("ParallelReductionWrapDivergence: Test PASSED\n");
     }

@@ -10,7 +10,6 @@ add_executable(
     main.cpp
     timer.cpp
     chapter01/hellocuda.cu
-    chapter02/Auxiliaries.cu
     chapter02/SumArraysOnGPU.cu
     chapter02/SumMatrixOnGPU.cu
     chapter02/ParallelReductionWrapDivergence.cu

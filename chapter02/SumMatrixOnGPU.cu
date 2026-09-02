@@ -2,7 +2,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 #include "timer.hpp"
-#include "Auxiliaries.h"
+#include "Auxiliaries.cuh"
 
 namespace
 {
@@ -82,7 +82,7 @@ int MatrixSum(size_t nx, size_t ny)
     float* d_B = nullptr;
     float* d_C = nullptr;
     
-    allocateAndInitializeHostMemory(nxy, h_A, h_B, hostRef, gpuRef, nBytes);
+    allocateAndInitializeHostMemory(nxy, h_A, h_B, hostRef, gpuRef);
     allocateDeviceMemory(nBytes, d_A, d_B, d_C);
     copyInputsToDevice(h_A, h_B, d_A, d_B, nBytes);
     

@@ -1,3 +1,6 @@
+#ifndef TIMER_HPP
+#define TIMER_HPP
+
 #include <chrono>
 #include <string>
 
@@ -25,3 +28,5 @@ private:
     time_point m_end;
     bool m_running = false;
 };
+
+#endif // TIMER_HPP

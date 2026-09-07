@@ -12,7 +12,7 @@ add_executable(
     chapter01/hellocuda.cu
     chapter02/SumArraysOnGPU.cu
     chapter02/SumMatrixOnGPU.cu
-    chapter02/ParallelReductionWrapDivergence.cu
+    chapter02/ParallelReduction.cu
 )
 
 target_include_directories(CudaLearning PRIVATE ${CMAKE_SOURCE_DIR})

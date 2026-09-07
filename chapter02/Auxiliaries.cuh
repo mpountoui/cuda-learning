@@ -20,14 +20,13 @@ void InitialData(T* array, int size)
 /*------------------------------------------------------------------------------------------*/
 
 template <typename T>
-void allocateAndInitializeHostMemory(size_t nElem, T*& h_A, T*& hostRef, T*& gpuRef)
+void allocateAndInitializeHostMemory(size_t nElem, T*& h_A, T*& hostRef)
 {
     Timer timer("AllocateAndInitializeHostMemory");
     timer.start();
     
     h_A     = (T*) malloc(nElem * sizeof(T));
     hostRef = (T*) calloc(nElem, sizeof(T));
-    gpuRef  = (T*) calloc(nElem, sizeof(T));
     
     InitialData(h_A, nElem);
     timer.elapsedSeconds();

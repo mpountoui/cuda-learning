@@ -2,92 +2,172 @@
 #include <cuda_runtime.h>
 #include "Auxiliaries.cuh"
 
-/*------------------------------------------------------------------------------------------*/
-
-void RecursiveRuduce(int* h_data, int* h_ref, size_t nElem)
+namespace
 {
-    if (nElem == 1)
+/*------------------------------------------------------------------------------------------*/
+    
+    using ReductionKernel = void (*)(int*, int*, size_t);
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    struct ReductionBuffers
     {
-        h_ref[0] = h_data[0];
-        return;
+        int* data   = nullptr;
+        int* result = nullptr;
+    };
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    struct ReductionRun
+    {
+        ReductionBuffers buffers;
+        long long elapsedMicroseconds = 0;
+    };
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    ReductionRun RunReduction(int* input, size_t nElem, dim3 grid, dim3 block, ReductionKernel kernel, const char* timerName)
+    {
+        ReductionBuffers buffers{nullptr, nullptr};
+        size_t nBytes = nElem * sizeof(int);
+        cudaMalloc(&buffers.data, nBytes);
+        cudaMalloc(&buffers.result, nBytes);
+        cudaMemcpy(buffers.data, input, nBytes, cudaMemcpyHostToDevice);
+        
+        Timer timer(timerName);
+        timer.start();
+        kernel<<<grid, block>>>(buffers.data, buffers.result, nElem);
+        cudaDeviceSynchronize();
+        timer.stop();
+        
+        return {buffers, timer.elapsedMicroseconds()};
     }
     
-    size_t stride = nElem / 2;
-    for (size_t i = 0; i < stride; i++)
-    {
-        h_ref[i] = h_data[i] + h_data[i + stride];
-    }
-    
-    RecursiveRuduce(h_ref, h_ref, stride);
-}
-
 /*------------------------------------------------------------------------------------------*/
-
-__global__ void ReduceNeighboredOnGPU(int* d_data, int* d_ref, size_t nElem)
-{
-    int tid = threadIdx.x;
-    int* block_ptr = d_data + blockIdx.x * blockDim.x;
-    int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
     
-    for(int stride = 1; stride < blockDim.x; stride *= 2)
+    int CollectResult(ReductionRun run, int* result, dim3 grid, size_t nElem)
     {
-        if( tid % (2 * stride) == 0 && global_tid < nElem )
+        cudaMemcpy(result, run.buffers.result, nElem * sizeof(int), cudaMemcpyDeviceToHost);
+        for (unsigned int i = 1; i < grid.x; ++i)
         {
-            block_ptr[tid] += block_ptr[tid + stride];
+            result[0] += result[i];
         }
-        __syncthreads();
+        cudaFree(run.buffers.data);
+        cudaFree(run.buffers.result);
+        return result[0];
     }
     
-    if( tid == 0 )
-    {
-        d_ref[blockIdx.x] = block_ptr[0];
-    }
-}
-
 /*------------------------------------------------------------------------------------------*/
-
-__global__ void ReduceNeighboredLessOnGPU(int* d_data, int* d_ref, size_t nElem)
-{
-    int tid = threadIdx.x;
-    int* block_ptr = d_data + blockIdx.x * blockDim.x;
-    int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
     
-    for(int stride = 1; stride < blockDim.x; stride *= 2)
+    void PrintResult(const char* name, int hostResult, int gpuResult, long long elapsedMicroseconds)
     {
-        int index = 2 * stride * tid;
-        if( index < blockDim.x && global_tid < nElem )
-        {
-            block_ptr[index] += block_ptr[index + stride];
-        }
-        __syncthreads();
+        const char* status = gpuResult == hostResult ? "PASSED" : "FAILED";
+        printf("  %-28s %8lld μs | Host: %d | GPU: %d | %s\n", name, elapsedMicroseconds, hostResult, gpuResult, status);
     }
     
-    if( tid == 0 )
-    {
-        d_ref[blockIdx.x] = block_ptr[0];
-    }
-}
-
 /*------------------------------------------------------------------------------------------*/
-
-__global__ void ReduceInterleavedOnGPU(int* d_data, int* d_ref, size_t nElem)
-{
-    int tid = threadIdx.x;
-    int* block_ptr = d_data + blockIdx.x * blockDim.x;
-    int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
     
-    for(int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+    void RecursiveRuduce(int* h_data, int* h_ref, size_t nElem)
     {
-        if( tid < stride && global_tid < nElem )
+        if (nElem == 1)
         {
-            block_ptr[tid] += block_ptr[tid + stride];
+            h_ref[0] = h_data[0];
+            return;
         }
-        __syncthreads();
+        
+        size_t stride = nElem / 2;
+        for (size_t i = 0; i < stride; i++)
+        {
+            h_ref[i] = h_data[i] + h_data[i + stride];
+        }
+        
+        RecursiveRuduce(h_ref, h_ref, stride);
     }
     
-    if( tid == 0 )
+/*------------------------------------------------------------------------------------------*/
+    
+    __global__ void ReduceNeighboredOnGPU(int* d_data, int* d_ref, size_t nElem)
     {
-        d_ref[blockIdx.x] = block_ptr[0];
+        int tid = threadIdx.x;
+        int* block_ptr = d_data + blockIdx.x * blockDim.x;
+        int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
+        
+        for(int stride = 1; stride < blockDim.x; stride *= 2)
+        {
+            if( tid % (2 * stride) == 0 && global_tid < nElem )
+            {
+                block_ptr[tid] += block_ptr[tid + stride];
+            }
+            __syncthreads();
+        }
+        
+        if( tid == 0 )
+        {
+            d_ref[blockIdx.x] = block_ptr[0];
+        }
+    }
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    __global__ void ReduceNeighboredLessOnGPU(int* d_data, int* d_ref, size_t nElem)
+    {
+        int tid = threadIdx.x;
+        int* block_ptr = d_data + blockIdx.x * blockDim.x;
+        int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
+        
+        for(int stride = 1; stride < blockDim.x; stride *= 2)
+        {
+            int index = 2 * stride * tid;
+            if( index < blockDim.x && global_tid < nElem )
+            {
+                block_ptr[index] += block_ptr[index + stride];
+            }
+            __syncthreads();
+        }
+        
+        if( tid == 0 )
+        {
+            d_ref[blockIdx.x] = block_ptr[0];
+        }
+    }
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    __global__ void ReduceInterleavedOnGPU(int* d_data, int* d_ref, size_t nElem)
+    {
+        int tid = threadIdx.x;
+        int* block_ptr = d_data + blockIdx.x * blockDim.x;
+        int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
+        
+        for(int stride = blockDim.x / 2; stride > 0; stride >>= 1)
+        {
+            if( tid < stride && global_tid < nElem )
+            {
+                block_ptr[tid] += block_ptr[tid + stride];
+            }
+            __syncthreads();
+        }
+        
+        if( tid == 0 )
+        {
+            d_ref[blockIdx.x] = block_ptr[0];
+        }
+    }
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    void RunAndReport(int* input, int hostResult, size_t nElem, dim3 grid, dim3 block)
+    {
+        ReductionRun divergent     = RunReduction(input, nElem, grid, block, ReduceNeighboredOnGPU    , "ReduceNeighboredOnGPU"    );
+        ReductionRun interleaved   = RunReduction(input, nElem, grid, block, ReduceInterleavedOnGPU   , "ReduceInterleavedOnGPU"   );
+        ReductionRun lessDivergent = RunReduction(input, nElem, grid, block, ReduceNeighboredLessOnGPU, "ReduceNeighboredLessOnGPU");
+        
+        int* gpuResult = static_cast<int*>(calloc(nElem, sizeof(int)));
+        printf("\nReduction results (blocks: %u, threads/block: %u):\n", grid.x, block.x);
+        PrintResult("Neighbor divergence"   , hostResult, CollectResult(divergent    , gpuResult, grid, nElem), divergent.elapsedMicroseconds    );
+        PrintResult("Interleaved addressing", hostResult, CollectResult(interleaved  , gpuResult, grid, nElem), interleaved.elapsedMicroseconds  );
+        PrintResult("Reduced divergence"    , hostResult, CollectResult(lessDivergent, gpuResult, grid, nElem), lessDivergent.elapsedMicroseconds);
+        free(gpuResult);
     }
 }
 
@@ -96,79 +176,23 @@ __global__ void ReduceInterleavedOnGPU(int* d_data, int* d_ref, size_t nElem)
 int ParallelReduction(size_t nElem)
 {
     cudaSetDevice(0);
-    size_t nBytes = nElem * sizeof(int);
+    int* values     = nullptr;
+    int* hostResult = nullptr;
+    allocateAndInitializeHostMemory(nElem, values, hostResult);
     
-    int* h_A = nullptr;
-    int* hostRef = nullptr;
-    int* gpuRef_A = nullptr;
-    int* gpuRef_B = nullptr;
-    int* gpuRef_C = nullptr;
-    int* d_A = nullptr;
-    int* d_C = nullptr;
-    int* d_B = nullptr;
-    int* d_D = nullptr;
-    int* d_E = nullptr;
-    int* d_F = nullptr;
-    
-    allocateAndInitializeHostMemory(nElem, h_A, hostRef);
-    gpuRef_A  = (int*) calloc(nElem, sizeof(int));
-    gpuRef_B  = (int*) calloc(nElem, sizeof(int));
-    gpuRef_C  = (int*) calloc(nElem, sizeof(int));
-    
-    allocateDeviceMemory(nBytes, d_A, d_C);
-    allocateDeviceMemory(nBytes, d_B, d_D);
-    allocateDeviceMemory(nBytes, d_E, d_F);
-    
-    Timer timer("RecursiveRuduce");
+    Timer timer("Host recursive reduction");
     timer.start();
-    RecursiveRuduce(h_A, hostRef, nElem);
+    RecursiveRuduce(values, hostResult, nElem);
     timer.stop();
-    
-    cudaMemcpy(d_A, h_A, nBytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_B, h_A, nBytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_E, h_A, nBytes, cudaMemcpyHostToDevice);
+    long long hostMicroseconds = timer.elapsedMicroseconds();
     
     dim3 block(512);
     dim3 grid((nElem + block.x - 1) / block.x);
     
-    Timer timerGPU("ReduceNeighboredOnGPU");
-    timerGPU.start();
-    ReduceNeighboredOnGPU<<<grid, block>>>(d_A, d_C, nElem);
-    cudaDeviceSynchronize();
-    timerGPU.stop();
-    
-    Timer timerGPU2("ReduceInterleavedOnGPU");
-    timerGPU2.start();
-    ReduceInterleavedOnGPU<<<grid, block>>>(d_B, d_D, nElem);
-    cudaDeviceSynchronize();
-    timerGPU2.stop();
-    
-    Timer timerGPU3("ReduceNeighboredLessOnGPU");
-    timerGPU3.start();
-    ReduceNeighboredLessOnGPU<<<grid, block>>>(d_E, d_F, nElem);
-    cudaDeviceSynchronize();
-    timerGPU3.stop();
-    
-    cudaMemcpy(gpuRef_A, d_C, nBytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(gpuRef_B, d_D, nBytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(gpuRef_C, d_F, nBytes, cudaMemcpyDeviceToHost);
-    
-    for(int i = 1; i < grid.x; i++)
-    {
-        gpuRef_A[0] += gpuRef_A[i];
-        gpuRef_B[0] += gpuRef_B[i];
-        gpuRef_C[0] += gpuRef_C[i];
-    }
-    
-    printf("ParallelReductionWrapDivergence: Host %d, GPU_A %d, GPU_B %d, GPU_C %d\n", hostRef[0], gpuRef_A[0], gpuRef_B[0], gpuRef_C[0]);
-    gpuRef_A[0] == hostRef[0] ? printf("ParallelReductionWrapDivergence: Test PASSED\n"):
-                                printf("ParallelReductionWrapDivergence: Test FAILED\n");
-    
-    gpuRef_B[0] == hostRef[0] ? printf("ParallelReductionWrapDivergence: Test PASSED\n"):
-                                printf("ParallelReductionWrapDivergence: Test FAILED\n");
-    
-    gpuRef_C[0] == hostRef[0] ? printf("ParallelReductionWrapDivergence: Test PASSED\n"):
-                                printf("ParallelReductionWrapDivergence: Test FAILED\n");
-    
+    printf("\nParallel reduction report (elements: %zu):\n", nElem);
+    printf("  %-28s %8lld μs | Result: %d\n", "Host recursive reduction", hostMicroseconds, hostResult[0]);
+    RunAndReport(values, hostResult[0], nElem, grid, block);
+    free(hostResult);
+    free(values);
     return 0;
 }

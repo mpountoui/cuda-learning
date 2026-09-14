@@ -16,8 +16,8 @@ public:
     void reset();
     
     double elapsedSeconds() const;
-    long long elapsedMilliseconds() const;
-    long long elapsedMicroseconds() const;
+    long long elapsedMilliseconds(bool = false) const;
+    long long elapsedMicroseconds(bool = false) const;
     
 private:
     using clock = std::chrono::high_resolution_clock;

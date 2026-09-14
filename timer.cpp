@@ -47,20 +47,26 @@ double Timer::elapsedSeconds() const
 
 /*------------------------------------------------------------------------------------------*/
 
-long long Timer::elapsedMilliseconds() const
+long long Timer::elapsedMilliseconds(bool print) const
 {
     const auto end = m_running ? clock::now() : m_end;
     long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - m_start).count();
-    std::cout << m_name << " elapsed time: " << ms << " ms\n";
+    if (print)
+    {
+        std::cout << m_name << " elapsed time: " << ms << " ms\n";
+    }
     return ms;
 }
 
 /*------------------------------------------------------------------------------------------*/
 
-long long Timer::elapsedMicroseconds() const
+long long Timer::elapsedMicroseconds(bool print) const
 {
     const auto end = m_running ? clock::now() : m_end;
     long long us = std::chrono::duration_cast<std::chrono::microseconds>(end - m_start).count();
-    std::cout << m_name << " elapsed time: " << us << " μs\n";
+    if (print)
+    {
+        std::cout << m_name << " elapsed time: " << us << " μs\n";
+    }
     return us;
 }

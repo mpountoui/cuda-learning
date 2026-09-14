@@ -94,7 +94,7 @@ namespace
         
         for(int stride = 1; stride < blockDim.x; stride *= 2)
         {
-            if( tid % (2 * stride) == 0 && global_tid < nElem )
+            if( tid % (2 * stride) == 0 && global_tid + stride < nElem )
             {
                 block_ptr[tid] += block_ptr[tid + stride];
             }
@@ -113,12 +113,11 @@ namespace
     {
         int tid = threadIdx.x;
         int* block_ptr = d_data + blockIdx.x * blockDim.x;
-        int global_tid = blockIdx.x * blockDim.x + threadIdx.x;
         
         for(int stride = 1; stride < blockDim.x; stride *= 2)
         {
             int index = 2 * stride * tid;
-            if( index < blockDim.x && global_tid < nElem )
+            if( index < blockDim.x && blockIdx.x * blockDim.x + index + stride < nElem )
             {
                 block_ptr[index] += block_ptr[index + stride];
             }
@@ -141,7 +140,7 @@ namespace
         
         for(int stride = blockDim.x / 2; stride > 0; stride >>= 1)
         {
-            if( tid < stride && global_tid < nElem )
+            if( tid < stride && global_tid + stride < nElem )
             {
                 block_ptr[tid] += block_ptr[tid + stride];
             }

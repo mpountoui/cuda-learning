@@ -155,21 +155,29 @@ namespace
     
 /*------------------------------------------------------------------------------------------*/
     
-    __global__ void ReduceUnrolling2(int* d_data, int* d_ref, size_t nElem)
+    template <unsigned int UnrollFactor>
+    __device__ void ReduceUnrolling(int* d_data, int* d_ref, size_t nElem)
     {
         int tid = threadIdx.x;
-        int* block_ptr = d_data + 2 * blockIdx.x * blockDim.x;
-        int global_tid = 2 * blockIdx.x * blockDim.x + threadIdx.x;
+        int* block_ptr = d_data + UnrollFactor * blockIdx.x * blockDim.x;
+        size_t global_tid = UnrollFactor * blockIdx.x * blockDim.x + threadIdx.x;
         
-        if( global_tid + blockDim.x < nElem )
+        if( global_tid < nElem )
         {
-            block_ptr[tid] += block_ptr[tid + blockDim.x];
+            for( unsigned int factor = 1; factor < UnrollFactor; ++factor )
+            {
+                size_t index = global_tid + factor * blockDim.x;
+                if( index < nElem )
+                {
+                    block_ptr[tid] += d_data[index];
+                }
+            }
         }
         __syncthreads();
         
         for(int stride = blockDim.x / 2; stride > 0; stride >>= 1)
         {
-            if( tid < stride && global_tid + stride < nElem )
+            if( tid < stride )
             {
                 block_ptr[tid] += block_ptr[tid + stride];
             }
@@ -184,6 +192,20 @@ namespace
     
 /*------------------------------------------------------------------------------------------*/
     
+    __global__ void ReduceUnrolling2(int* d_data, int* d_ref, size_t nElem)
+    {
+        ReduceUnrolling<2>(d_data, d_ref, nElem);
+    }
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    __global__ void ReduceUnrolling4(int* d_data, int* d_ref, size_t nElem)
+    {
+        ReduceUnrolling<4>(d_data, d_ref, nElem);
+    }
+    
+/*------------------------------------------------------------------------------------------*/
+    
     void RunAndReport(int* input, int hostResult, size_t nElem, dim3 grid, dim3 block)
     {
         ReductionRun divergent     = RunReduction(input, nElem, grid, block, ReduceNeighboredOnGPU    , "ReduceNeighboredOnGPU"    );
@@ -191,13 +213,16 @@ namespace
         ReductionRun lessDivergent = RunReduction(input, nElem, grid, block, ReduceNeighboredLessOnGPU, "ReduceNeighboredLessOnGPU");
         dim3 unrolling2Grid((nElem + 2 * block.x - 1) / (2 * block.x));
         ReductionRun unrolling2 = RunReduction(input, nElem, unrolling2Grid, block, ReduceUnrolling2, "ReduceUnrolling2");
+        dim3 unrolling4Grid((nElem + 4 * block.x - 1) / (4 * block.x));
+        ReductionRun unrolling4 = RunReduction(input, nElem, unrolling4Grid, block, ReduceUnrolling4, "ReduceUnrolling4");
         
         int* gpuResult = static_cast<int*>(calloc(nElem, sizeof(int)));
         printf("\nReduction results (blocks: %u, threads/block: %u):\n", grid.x, block.x);
         PrintResult("Neighbor divergence"   , hostResult, CollectResult(divergent    , gpuResult, grid          , nElem), divergent.elapsedMicroseconds    );
-        PrintResult("Interleaved addressing", hostResult, CollectResult(interleaved  , gpuResult, grid          , nElem), interleaved.elapsedMicroseconds  );
         PrintResult("Reduced divergence"    , hostResult, CollectResult(lessDivergent, gpuResult, grid          , nElem), lessDivergent.elapsedMicroseconds);
+        PrintResult("Interleaved addressing", hostResult, CollectResult(interleaved  , gpuResult, grid          , nElem), interleaved.elapsedMicroseconds  );
         PrintResult("Unrolling x2"          , hostResult, CollectResult(unrolling2   , gpuResult, unrolling2Grid, nElem), unrolling2.elapsedMicroseconds   );
+        PrintResult("Unrolling x4"          , hostResult, CollectResult(unrolling4   , gpuResult, unrolling4Grid, nElem), unrolling4.elapsedMicroseconds   );
         free(gpuResult);
     }
 }
@@ -217,7 +242,7 @@ int ParallelReduction(size_t nElem)
     timer.stop();
     long long hostMicroseconds = timer.elapsedMicroseconds();
     
-    dim3 block(1024);
+    dim3 block(512);
     dim3 grid((nElem + block.x - 1) / block.x);
     
     printf("\nParallel reduction report (elements: %zu):\n", nElem);

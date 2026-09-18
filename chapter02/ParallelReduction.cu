@@ -206,6 +206,40 @@ namespace
     
 /*------------------------------------------------------------------------------------------*/
     
+    __global__ void gpuRecursiveReduce (int *g_idata, int *g_odata, unsigned int isize)
+    {
+        unsigned int tid = threadIdx.x;
+        
+        int *idata = g_idata + blockIdx.x * blockDim.x;
+        int *odata = &g_odata[blockIdx.x];
+        
+        // stop condition
+        if (isize == 2)
+        {
+            if (tid == 0)
+            {
+                g_odata[blockIdx.x] = idata[0] + idata[1];
+            }
+            return;
+        }
+        
+        int istride = isize >> 1;
+        
+        if(istride > 1 && tid < istride)
+        {
+            idata[tid] += idata[tid + istride];
+        }
+        
+        __syncthreads();
+        
+        // nested invocation to generate child grids
+        if(tid == 0)
+        {
+            gpuRecursiveReduce<<<1, istride>>>(idata, odata, istride);
+        }
+    }
+/*------------------------------------------------------------------------------------------*/
+    
     void RunAndReport(int* input, int hostResult, size_t nElem, dim3 grid, dim3 block)
     {
         ReductionRun divergent     = RunReduction(input, nElem, grid, block, ReduceNeighboredOnGPU    , "ReduceNeighboredOnGPU"    );

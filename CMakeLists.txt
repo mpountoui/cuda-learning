@@ -16,3 +16,7 @@ add_executable(
 )
 
 target_include_directories(CudaLearning PRIVATE ${CMAKE_SOURCE_DIR})
+
+set_target_properties(CudaLearning PROPERTIES
+    CUDA_SEPARABLE_COMPILATION ON
+)

@@ -7,6 +7,6 @@
 
 int main()
 {
-    ParallelReduction(1<<25);
+    ParallelReduction(1<<19);
     return 0;
 }

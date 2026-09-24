@@ -7,6 +7,7 @@ namespace
 /*------------------------------------------------------------------------------------------*/
     
     using ReductionKernel = void (*)(int*, int*, size_t);
+    using RecursiveReductionKernel = void (*)(int*, int*, size_t, size_t);
     
 /*------------------------------------------------------------------------------------------*/
     
@@ -26,18 +27,53 @@ namespace
     
 /*------------------------------------------------------------------------------------------*/
     
-    ReductionRun RunReduction(int* input, size_t nElem, dim3 grid, dim3 block, ReductionKernel kernel, const char* timerName)
+    ReductionBuffers CreateReductionBuffers(int* input, size_t nElem)
     {
         ReductionBuffers buffers{nullptr, nullptr};
         size_t nBytes = nElem * sizeof(int);
         cudaMalloc(&buffers.data, nBytes);
         cudaMalloc(&buffers.result, nBytes);
         cudaMemcpy(buffers.data, input, nBytes, cudaMemcpyHostToDevice);
+        return buffers;
+    }
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    ReductionRun RunReduction(int* input, size_t nElem, dim3 grid, dim3 block, ReductionKernel kernel, const char* timerName)
+    {
+        ReductionBuffers buffers = CreateReductionBuffers(input, nElem);
         
         Timer timer(timerName);
         timer.start();
         kernel<<<grid, block>>>(buffers.data, buffers.result, nElem);
-        cudaDeviceSynchronize();
+        
+        cudaError_t error = cudaDeviceSynchronize();
+        if (error != cudaSuccess)
+        {
+            printf("CUDA error: %s\n", cudaGetErrorString(error));
+        }
+        
+        timer.stop();
+        
+        return {buffers, timer.elapsedMicroseconds()};
+    }
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    ReductionRun RunReduction(int* input, size_t nElem, dim3 grid, dim3 block, RecursiveReductionKernel kernel, const char* timerName, size_t blockSize)
+    {
+        ReductionBuffers buffers = CreateReductionBuffers(input, nElem);
+        
+        Timer timer(timerName);
+        timer.start();
+        kernel<<<grid, block>>>(buffers.data, buffers.result, nElem, blockSize);
+        
+        cudaError_t error = cudaDeviceSynchronize();
+        if (error != cudaSuccess)
+        {
+            printf("CUDA error: %s\n", cudaGetErrorString(error));
+        }
+        
         timer.stop();
         
         return {buffers, timer.elapsedMicroseconds()};
@@ -206,7 +242,7 @@ namespace
     
 /*------------------------------------------------------------------------------------------*/
     
-    __global__ void gpuRecursiveReduce (int *g_idata, int *g_odata, unsigned int isize)
+    __global__ void gpuRecursiveReduce(int *g_idata, int *g_odata, size_t nElem, size_t BlockSize)
     {
         unsigned int tid = threadIdx.x;
         
@@ -214,7 +250,7 @@ namespace
         int *odata = &g_odata[blockIdx.x];
         
         // stop condition
-        if (isize == 2)
+        if (BlockSize == 2)
         {
             if (tid == 0)
             {
@@ -223,11 +259,11 @@ namespace
             return;
         }
         
-        int istride = isize >> 1;
+        int HalfBlockSize = BlockSize >> 1;
         
-        if(istride > 1 && tid < istride)
+        if(tid < HalfBlockSize && blockIdx.x * blockDim.x + tid + HalfBlockSize < nElem)
         {
-            idata[tid] += idata[tid + istride];
+            idata[tid] += idata[tid + HalfBlockSize];
         }
         
         __syncthreads();
@@ -235,9 +271,15 @@ namespace
         // nested invocation to generate child grids
         if(tid == 0)
         {
-            gpuRecursiveReduce<<<1, istride>>>(idata, odata, istride);
+            gpuRecursiveReduce<<<1, HalfBlockSize>>>(idata, odata, nElem, HalfBlockSize);
+            cudaError_t error = cudaGetLastError();
+            if (error != cudaSuccess)
+            {
+                printf("Child launch failed in block %u: %s\n", blockIdx.x, cudaGetErrorString(error));
+            }
         }
     }
+    
 /*------------------------------------------------------------------------------------------*/
     
     void RunAndReport(int* input, int hostResult, size_t nElem, dim3 grid, dim3 block)
@@ -249,6 +291,7 @@ namespace
         ReductionRun unrolling2 = RunReduction(input, nElem, unrolling2Grid, block, ReduceUnrolling2, "ReduceUnrolling2");
         dim3 unrolling4Grid((nElem + 4 * block.x - 1) / (4 * block.x));
         ReductionRun unrolling4 = RunReduction(input, nElem, unrolling4Grid, block, ReduceUnrolling4, "ReduceUnrolling4");
+        ReductionRun recursive  = RunReduction(input, nElem, grid, block, gpuRecursiveReduce, "gpuRecursiveReduce", block.x);
         
         int* gpuResult = static_cast<int*>(calloc(nElem, sizeof(int)));
         printf("\nReduction results (blocks: %u, threads/block: %u):\n", grid.x, block.x);
@@ -257,6 +300,7 @@ namespace
         PrintResult("Interleaved addressing", hostResult, CollectResult(interleaved  , gpuResult, grid          , nElem), interleaved.elapsedMicroseconds  );
         PrintResult("Unrolling x2"          , hostResult, CollectResult(unrolling2   , gpuResult, unrolling2Grid, nElem), unrolling2.elapsedMicroseconds   );
         PrintResult("Unrolling x4"          , hostResult, CollectResult(unrolling4   , gpuResult, unrolling4Grid, nElem), unrolling4.elapsedMicroseconds   );
+        PrintResult("Recursive"             , hostResult, CollectResult(recursive    , gpuResult, grid          , nElem), recursive.elapsedMicroseconds    );
         free(gpuResult);
     }
 }

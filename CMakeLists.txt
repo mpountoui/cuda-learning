@@ -13,6 +13,7 @@ add_executable(
     chapter02/SumArraysOnGPU.cu
     chapter02/SumMatrixOnGPU.cu
     chapter02/ParallelReduction.cu
+    chapter03/MatrixTranspose.cu
 )
 
 target_include_directories(CudaLearning PRIVATE ${CMAKE_SOURCE_DIR})

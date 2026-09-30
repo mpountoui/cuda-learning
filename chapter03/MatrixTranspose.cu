@@ -24,12 +24,27 @@ namespace
     
 /*------------------------------------------------------------------------------------------*/
     
-    __global__ void CopyRow(float* input, float* output, size_t rows, size_t columns)
+    __global__ void CopyRow(float* input, float* output, size_t nx, size_t ny)
     {
-        size_t index = ( blockDim.x * blockDim.y ) * blockIdx.y + ( blockDim.x * blockDim.y ) * blockIdx.x + ( threadIdx.y * blockDim.x ) + threadIdx.x;
-        if (index < rows * columns)
+        size_t ix = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t iy = blockIdx.y * blockDim.y + threadIdx.y;
+        
+        if( ix < nx && iy < ny )
         {
-            output[index] = input[index];
+            output[iy * nx + ix] = input[iy * nx + ix];
+        }
+    }
+    
+/*------------------------------------------------------------------------------------------*/
+    
+    __global__ void CopyColumn(float* input, float* output, size_t nx, size_t ny)
+    {
+        size_t ix = blockIdx.x * blockDim.x + threadIdx.x;
+        size_t iy = blockIdx.y * blockDim.y + threadIdx.y;
+        
+        if( ix < ny && iy < nx )
+        {
+            output[ix * ny + iy] = input[ix * ny + iy];
         }
     }
 }
